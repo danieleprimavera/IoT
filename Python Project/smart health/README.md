@@ -9,7 +9,7 @@
 
 Il sistema utilizza un'architettura a livelli che integra sensori *constrained* (vincolati) e attuatori tramite un nodo centrale di elaborazione (Edge Logic).
 
-![System Architecture](architecture.png)
+![System Architecture](architecture_v2.png)
 *(Schema logico del flusso dati: Sensore -> Collector -> Broker -> Dashboard/Attuatore)*
 
 ---
