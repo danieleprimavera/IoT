@@ -1,6 +1,6 @@
 # 🏥 Smart Health Monitor - IoT Infectious Disease Ward
 
-> **Intelligent IoT Project - A.A. 2024/2025**
+> **Intelligent IoT Project - A.A. 2025/2026**
 > Un sistema di monitoraggio ibrido (CoAP + MQTT) per la gestione automatizzata dei parametri vitali e ambientali in reparti ospedalieri critici.
 
 ---
