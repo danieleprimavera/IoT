@@ -1,157 +1,85 @@
-# 🏥 Smart Health Monitor - IoT Infectious Disease Ward
+🏥 Smart Health Monitor - IoT Infectious Disease Ward
 
-> **Intelligent IoT Project - A.A. 2025/2026**
-> Un sistema di monitoraggio ibrido (CoAP + MQTT) per la gestione automatizzata dei parametri vitali e ambientali in reparti ospedalieri critici.
+Intelligent IoT Project - A.A. 2025/2026
+Un sistema di monitoraggio ibrido (CoAP + MQTT) per la gestione automatizzata dei parametri vitali e ambientali in reparti ospedalieri critici.
 
----
+📸 Architettura del Sistema
 
-## 📸 Architettura del Sistema
+Il sistema utilizza un'architettura a livelli che integra sensori constrained (vincolati) e attuatori tramite un nodo centrale di elaborazione (Edge Logic).
 
-Il sistema utilizza un'architettura a livelli che integra sensori *constrained* (vincolati) e attuatori tramite un nodo centrale di elaborazione (Edge Logic).
+📝 Descrizione dello Scenario
 
-![System Architecture](architecture_v2.png)
-*(Schema logico del flusso dati: Sensore -> Collector -> Broker -> Dashboard/Attuatore)*
+Il progetto simula una Smart Room in un reparto di malattie infettive. L'obiettivo è monitorare i parametri vitali del paziente e intervenire automaticamente sul sistema HVAC, riducendo l'interazione fisica del personale medico.
 
----
+🌟 Funzionalità Avanzate
 
-## 📝 Descrizione dello Scenario
+Monitoraggio Multi-Reparto: La dashboard può gestire più stanze simultaneamente.
 
-Il progetto simula una **Smart Room** in un reparto di malattie infettive. L'obiettivo è monitorare costantemente i parametri vitali del paziente (Battito Cardiaco) e intervenire automaticamente sull'ambiente (Sistema HVAC) per garantire condizioni di sicurezza, riducendo l'interazione fisica non necessaria da parte del personale medico.
+Auto-Discovery con Approvazione: I nuovi sensori vengono rilevati automaticamente, ma è l'operatore a decidere quando attivarli nel sistema di monitoraggio.
 
-### Funzionalità Chiave
-1.  **Monitoraggio Real-Time:** Lettura continua dei sensori biometrici.
-2.  **Automazione (Edge Computing):** Il *Data Collector* analizza i dati localmente e decide autonomamente se attivare la ventilazione o il riscaldamento.
-3.  **Digital Twin:** Una dashboard web riflette in tempo reale lo stato fisico della stanza e del paziente.
-4.  **Allarmi Intelligenti:** Segnalazione visiva immediata in caso di parametri critici (es. Tachicardia o Ipotermia).
+Watchdog in Tempo Reale: Rilevamento immediato dello stato OFFLINE se un sensore smette di inviare dati per più di 10 secondi.
 
----
+Edge Computing: Il Data Collector analizza i dati localmente (BPM > 100) per attivare l'attuatore HVAC senza attendere input dal cloud.
 
-## 🛠️ Tech Stack & Protocolli
+Digital Twin Dinamico: Visualizzazione reattiva dello stato del paziente (STABLE / CRITICAL / OFFLINE) con grafici ad area e log eventi storici.
 
-Il progetto è sviluppato interamente in **Python** e implementa i seguenti standard IoT:
+🛠️ Tech Stack & Protocolli
 
-| Componente | Protocollo | Libreria | Ruolo |
-| :--- | :--- | :--- | :--- |
-| **Smart Sensor** | **CoAP** (UDP) | `aiocoap` | Espone una risorsa *Observable* per il battito cardiaco. |
-| **Data Collector** | **CoAP** + **MQTT** | `aiocoap` + `paho-mqtt` | Bridge: Osserva il sensore (CoAP) e pubblica comandi/dati (MQTT). |
-| **HVAC Actuator** | **MQTT** (TCP) | `paho-mqtt` | Sottoscrive il topic dei comandi ed esegue azioni. |
-| **Dashboard** | **MQTT** (WebSocket) | `streamlit` + `plotly` | Interfaccia grafica per il monitoraggio (Digital Twin). |
+Componente      Protocollo       Libreria                Ruolo
 
----
+Smart Sensor    CoAP (UDP)       aiocoap                 Espone il battito cardiaco come risorsa Observable.
 
-## 📂 Struttura del Progetto
+Data Collector  CoAP + MQTT      aiocoap + paho-mqtt     Edge Gateway: Bridge tra rete CoAP e Broker MQTT.
 
-```bash
+HVAC Actuator   MQTT (TCP)       paho-mqtt               Sottoscrive i comandi ed esegue azioni simulate.
+
+Dashboard       MQTT (Web)       streamlit + plotly      Digital Twin: UI interattiva e gestione stato della sessione.
+
+📂 Struttura del Progetto
+
 📦 smart-health-monitor
- ┣ 📜 smart_sensor.py      # Sensore CoAP (Server) che simula il paziente
- ┣ 📜 data_collector.py    # Logica centrale (CoAP Client + MQTT Publisher)
- ┣ 📜 hvac_actuator.py     # Attuatore MQTT (Client) che simula il condizionatore
- ┣ 📜 dashboard.py         # Dashboard grafica (Streamlit)
- ┣ 📜 ui_assets.py         # Modulo grafico (CSS/HTML Templates)
- ┣ 📜 architecture.png     # Immagine dell'architettura
- ┗ 📜 README.md            # Documentazione
+ ┣ 📜 smart_sensor.py      # Server CoAP: Genera dati biometrici simulati.
+ ┣ 📜 data_collector.py    # Edge Logic: Bridge CoAP-MQTT e decision making.
+ ┣ 📜 hvac_actuator.py     # MQTT Client: Simulazione attuatore ambientale.
+ ┣ 📜 dashboard.py         # Streamlit UI: Gestione multi-reparto e approvazione.
+ ┣ 📜 ui_assets.py         # Asset grafici: CSS personalizzato e template HTML.
+ ┣ 📜 architecture.png     # Schema dell'architettura di sistema.
+ ┣ 📜 requirements.txt     # Dipendenze del progetto.
+ ┗ 📜 README.md            # Documentazione del progetto.
 
- Certamente! Ecco il file README.md completo e unificato, pronto per essere copiato e incollato. Ho aggiornato la sezione autori con i tuoi dati specifici.Markdown# 🏥 Smart Health Monitor - IoT Infectious Disease Ward
+ 🚀 Guida all'Esecuzione (Demo Sequence)
 
-> **Intelligent IoT Project - A.A. 2025/2026**
-> Un sistema di monitoraggio ibrido (CoAP + MQTT) per la gestione automatizzata dei parametri vitali e ambientali in reparti ospedalieri critici.
+Per una corretta simulazione, avvia gli script in questo ordine in terminali separati:
 
----
+Terminale 1 (Sensore/Paziente): python smart_sensor.py
 
-## 📸 Architettura del Sistema
+Terminale 2 (Attuatore/HVAC): python hvac_actuator.py
 
-Il sistema utilizza un'architettura a livelli che integra sensori *constrained* (vincolati) e attuatori tramite un nodo centrale di elaborazione (Edge Logic).
+Terminale 3 (Data Collector): python data_collector.py
 
-![System Architecture](architecture.png)
-*(Schema logico del flusso dati: Sensore -> Collector -> Broker -> Dashboard/Attuatore)*
+Terminale 4 (Dashboard): streamlit run dashboard.py
 
----
+💡 Come gestire la Dashboard durante la Demo
 
-## 📝 Descrizione dello Scenario
+Attivazione: Al primo avvio, clicca su "✅ Attiva ROOMX" nella sidebar per iniziare il monitoraggio.
 
-Il progetto simula una **Smart Room** in un reparto di malattie infettive. L'obiettivo è monitorare costantemente i parametri vitali del paziente (Battito Cardiaco) e intervenire automaticamente sull'ambiente (Sistema HVAC) per garantire condizioni di sicurezza, riducendo l'interazione fisica non necessaria da parte del personale medico.
+Rilevamento Nuovi Nodi: Se aggiungi un nuovo sensore durante l'esecuzione, clicca sul tasto giallo "AGGIORNA LISTA" che apparirà automaticamente.
 
-### Funzionalità Chiave
-1.  **Monitoraggio Real-Time:** Lettura continua dei sensori biometrici tramite protocollo leggero (CoAP).
-2.  **Automazione (Edge Computing):** Il *Data Collector* analizza i dati localmente e decide autonomamente se attivare la ventilazione o il riscaldamento.
-3.  **Digital Twin:** Una dashboard web riflette in tempo reale lo stato fisico della stanza e del paziente tramite MQTT.
-4.  **Allarmi Intelligenti:** Segnalazione visiva immediata in caso di parametri critici (es. Tachicardia o Ipotermia).
+Simulazione Offline: Spegni il terminale del sensore; dopo 10 secondi la card passerà da "STABLE" a "OFFLINE".
 
----
+📊 Note sull'Efficienza dell'Architettura
+Il sistema evita il fenomeno del polling selvaggio:
 
-## 🛠️ Tech Stack & Protocolli
+Push-based: MQTT invia i dati alla dashboard solo quando ci sono variazioni.
 
-Il progetto è sviluppato interamente in **Python** e implementa i seguenti standard IoT:
-
-| Componente | Protocollo | Libreria | Ruolo |
-| :--- | :--- | :--- | :--- |
-| **Smart Sensor** | **CoAP** (UDP) | `aiocoap` | Espone una risorsa *Observable* per il battito cardiaco. |
-| **Data Collector** | **CoAP** + **MQTT** | `aiocoap` + `paho-mqtt` | Bridge: Osserva il sensore (CoAP) e pubblica comandi/dati (MQTT). |
-| **HVAC Actuator** | **MQTT** (TCP) | `paho-mqtt` | Sottoscrive il topic dei comandi ed esegue azioni simulate. |
-| **Dashboard** | **MQTT** (WebSocket) | `streamlit` + `plotly` | Interfaccia grafica avanzata per il monitoraggio (Digital Twin). |
-
----
-
-## 📂 Struttura del Progetto
-
-```bash
-📦 smart-health-monitor
- ┣ 📜 smart_sensor.py      # Sensore CoAP (Server) che simula il paziente
- ┣ 📜 data_collector.py    # Logica centrale (CoAP Client + MQTT Publisher)
- ┣ 📜 hvac_actuator.py     # Attuatore MQTT (Client) che simula il condizionatore
- ┣ 📜 dashboard.py         # Dashboard grafica (Streamlit) - Entry point UI
- ┣ 📜 ui_assets.py         # Modulo grafico (CSS/HTML Templates) separato
- ┣ 📜 architecture.png     # Immagine dell'architettura
- ┣ 📜 requirements.txt     # Lista delle dipendenze
- ┗ 📜 README.md            # Questo file di documentazione
-
-🚀 Installazione e Setup
-1. Prerequisiti
-Assicurarsi di avere installato Python 3.10 o superiore.
-
-2. Installazione Librerie
-Puoi installare tutte le dipendenze necessarie manualmente eseguendo questo comando nel terminale:
-
-pip install aiocoap paho-mqtt streamlit pandas plotly
-
-▶️ Guida all'Esecuzione (Demo Sequence)
-Per avviare la simulazione completa, è necessario aprire 4 terminali separati ed eseguire gli script nel seguente ordine specifico:
-
-1️⃣ Terminale 1: Il Sensore (Paziente)
-Avvia il server CoAP che genera i dati biometrici simulati.
-
-python smart_sensor.py
-
-Output atteso: [SENSORE] Smart Bedside Monitor avviato su coap://127.0.0.1...
-
-2️⃣ Terminale 2: L'Attuatore (HVAC)
-Avvia il sistema di condizionamento che attende comandi MQTT.
-
-python hvac_actuator.py
-
-Output atteso: [ATTUATORE] Connesso al Broker...
-
-3️⃣ Terminale 3: Il Data Collector (Logic Unit)
-Avvia il "cervello" del sistema che collega sensore e attuatore.
-
-python data_collector.py
-
-Output atteso: [COLLECTOR] Connesso al Broker MQTT e ricezione dati in tempo reale.
-
-4️⃣ Terminale 4: La Dashboard (Digital Twin)
-Avvia l'interfaccia grafica web.
-
-streamlit run dashboard.py
-
-Il browser di sistema si aprirà automaticamente all'indirizzo http://localhost:8501
-
-🧪 Simulazione ScenariDurante la demo, il sistema reagirà automaticamente ai dati generati casualmente dal sensore
+Edge Processing: La logica di allarme è decentralizzata sul Collector, garantendo tempi di risposta rapidi anche in caso di latenza del broker cloud.
 
 👥 Autori
-Progetto realizzato per il corso di Intelligent Internet of Things.
 
 Studente: Daniele Primavera
 
 Matricola: 188567
 
 Anno Accademico: 2025/2026
+
+Corso di Intelligent Internet of Things
