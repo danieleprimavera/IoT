@@ -1,83 +1,146 @@
 import asyncio
 import logging
+import sys
+import socket
 from aiocoap import *
+import aiocoap.error as error
 import paho.mqtt.client as mqtt
 
-# CONFIGURAZIONE CRITICA: Usa 127.0.0.1 per combaciare con il sensore
-COAP_URI = "coap://127.0.0.1/heartrate"
+# --- CONFIGURAZIONE ---
 MQTT_BROKER = "broker.hivemq.com"
+MAX_ROOMS = 5
+BASE_PORT = 5683
+TIMEOUT_SECONDS = 6  # Se non ricevo dati per 6s, considero il sensore perso
 
-# --- CONFIGURAZIONE TOPIC ---
-MQTT_TOPIC_CMD = "hospital/room1/hvac"   # Per i comandi all'attuatore (ON/OFF)
-MQTT_TOPIC_DATA = "hospital/room1/data"  # NUOVO: Per i dati del grafico (Numeri)
+# Colori Console
+GREEN = "\033[92m"
+CYAN = "\033[96m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
 
-# --- SETUP MQTT (Versione 2 API per evitare warning) ---
+# --- ZITTIRE ERRORI INTERNI ---
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+logging.getLogger("aiocoap").setLevel(logging.CRITICAL)
+
+# --- SETUP WINDOWS ---
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# --- MQTT SETUP ---
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-def on_mqtt_connect(client, userdata, flags, reason_code, properties):
+def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
-        print("[COLLECTOR] Connesso al broker MQTT")
-    else:
-        print(f"[COLLECTOR] Errore connessione MQTT: {reason_code}")
+        print(f"{GREEN}[COLLECTOR] Connesso al Cloud MQTT{RESET}")
 
-mqtt_client.on_connect = on_mqtt_connect
+mqtt_client.on_connect = on_connect
 mqtt_client.connect(MQTT_BROKER, 1883, 60)
 mqtt_client.loop_start()
 
-# --- LOGICA APPLICATIVA ---
-def process_data(bpm):
-    # 1. INVIO DATI ALLA DASHBOARD (Visualizzazione)
-    # Pubblichiamo il numero puro per farlo leggere a Streamlit
-    if mqtt_client.is_connected():
-        mqtt_client.publish(MQTT_TOPIC_DATA, str(bpm))
+# --- TASK DI MONITORAGGIO CON WATCHDOG ---
+async def monitor_room_task(room_id, port):
+    uri = f"coap://127.0.0.1:{port}/heartrate"
+    topic_data = f"hospital/{room_id}/data"
+    topic_cmd = f"hospital/{room_id}/hvac"
+    
+    # Questo loop esterno serve a RICREARE il protocollo se qualcosa si rompe
+    while True:
+        protocol = None
+        try:
+            protocol = await Context.create_client_context()
+            request = Message(code=GET, uri=uri, observe=0)
+            pr = protocol.request(request)
+            
+            # Otteniamo l'iteratore manuale per poter applicare il timeout
+            iterator = pr.observation.__aiter__()
+            
+            is_connected = False
+            
+            # Loop interno: Lettura pacchetti
+            while True:
+                try:
+                    # ⚡ WATCHDOG: Aspetta il prossimo dato per MAX 'TIMEOUT_SECONDS'
+                    # Se il sensore muore, qui scatta il TimeoutError e ci sblocca!
+                    response = await asyncio.wait_for(iterator.__anext__(), timeout=TIMEOUT_SECONDS)
+                    
+                    if not is_connected:
+                        print(f"{GREEN}[NEW DEVICE] {room_id.upper()} agganciato su porta {port}!{RESET}")
+                        is_connected = True
 
-    # 2. LOGICA DI CONTROLLO (Automazione)
-    # Decide cosa fare con l'HVAC in base al battito
-    if bpm > 100:
-        print(f" -> ⚠️  ALLARME: Battito {bpm} BPM! Attivazione RAFFREDDAMENTO.")
-        mqtt_client.publish(MQTT_TOPIC_CMD, "ON")
-    elif bpm < 60:
-        print(f" -> 📉 ALLARME: Battito {bpm} BPM! Attivazione RISCALDAMENTO.")
-        mqtt_client.publish(MQTT_TOPIC_CMD, "HEAT")
-    else:
-        print(f" -> ✅ Battito {bpm} BPM: Parametri nella norma.")
-        mqtt_client.publish(MQTT_TOPIC_CMD, "OFF")
+                    payload = response.payload.decode('ascii')
+                    if not payload: continue
+                    
+                    # --- LOGICA DI BUSINESS ---
+                    try:
+                        bpm = int(payload)
+                        mqtt_client.publish(topic_data, str(bpm))
+                        
+                        command = "OFF"
+                        log_prefix = f"[{room_id.upper()}]"
+                        
+                        if bpm > 100:
+                            print(f"{log_prefix} {RED}⚠️  ALLARME: {bpm} BPM -> COOLING{RESET}")
+                            command = "ON"
+                        elif bpm < 60:
+                            print(f"{log_prefix} {RED}📉 ALLARME: {bpm} BPM -> HEATING{RESET}")
+                            command = "HEAT"
+                        
+                        mqtt_client.publish(topic_cmd, command)
 
-# --- MAIN LOOP (Versione Moderna async for) ---
+                    except ValueError:
+                        pass
+
+                except asyncio.TimeoutError:
+                    # NESSUN DATO RICEVUTO PER 6 SECONDI
+                    if is_connected:
+                        print(f"{YELLOW}[WARN] Segnale perso da {room_id}. Riconnessione in corso...{RESET}")
+                    # Rompiamo il loop interno per forzare la ricreazione del protocollo
+                    break 
+                
+                except Exception:
+                    # Qualsiasi altro errore (es. WinError 10054 improvviso)
+                    break
+
+        except Exception:
+            # Errore durante la creazione del contesto (es. porta occupata o altro)
+            await asyncio.sleep(2)
+            
+        finally:
+            # 🧹 PULIZIA TOTALE
+            # Chiudiamo il vecchio protocollo prima di ricominciarne uno nuovo
+            if protocol:
+                try:
+                    await protocol.shutdown()
+                except:
+                    pass
+            
+            # Piccola pausa prima di riprovare a connettersi
+            if not is_connected:
+                await asyncio.sleep(3)
+
+# --- MAIN ---
 async def main():
-    protocol = await Context.create_client_context()
+    print("--- 🏥 HOSPITAL IOT AUTO-DISCOVERY SYSTEM ---")
+    print(f"Sistema attivo con Watchdog (Timeout: {TIMEOUT_SECONDS}s).")
+    print("Puoi staccare e riattaccare i sensori liberamente.")
     
-    # Crea la richiesta OBSERVE
-    request = Message(code=GET, uri=COAP_URI, observe=0)
-    pr = protocol.request(request)
+    tasks = []
+    for i in range(MAX_ROOMS):
+        room_num = i + 1
+        port = BASE_PORT + i
+        room_id = f"room{room_num}"
+        tasks.append(asyncio.create_task(monitor_room_task(room_id, port)))
     
-    print(f"[COLLECTOR] In attesa di dati da {COAP_URI}...")
-
     try:
-        # NUOVO METODO: Ciclo infinito asincrono che riceve le notifiche
-        async for response in pr.observation:
-            try:
-                payload = response.payload.decode('ascii')
-                # Ignora payload vuoti se capitano
-                if not payload: continue
-                
-                bpm = int(payload)
-                process_data(bpm)
-                
-            except ValueError:
-                print(f"[ERRORE] Dato ricevuto non valido: {response.payload}")
-                
-    except Exception as e:
-        print(f"[ERRORE CRITICO] Impossibile connettersi al sensore: {e}")
-        print("SUGGERIMENTO: Verifica che smart_sensor.py stia girando su 127.0.0.1")
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        pass
 
 if __name__ == "__main__":
-    # Disabilita i log di debug di sistema per avere una console pulita
-    logging.basicConfig(level=logging.ERROR)
-    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nCollector terminato.")
+        print("\n[SYSTEM] Spegnimento completato.")
         mqtt_client.loop_stop()
         mqtt_client.disconnect()

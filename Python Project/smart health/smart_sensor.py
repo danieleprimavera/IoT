@@ -2,52 +2,76 @@ import asyncio
 import random
 import aiocoap.resource as resource
 import aiocoap
+import sys
+
+# Colori
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
+CYAN = "\033[96m"
 
 class HeartRateResource(resource.ObservableResource):
-    def __init__(self):
+    def __init__(self, room_name):
         super().__init__()
         self.bpm = 70
+        self.room_name = room_name
 
     async def render_get(self, request):
-        # Risponde alla richiesta GET standard
         return aiocoap.Message(payload=str(self.bpm).encode('ascii'))
 
     def update_state(self):
-        # Simula il cambio del battito cardiaco
-        self.bpm = random.randint(60, 110)
-        print(f"[SENSORE] Nuovo BPM rilevato: {self.bpm}")
-        
-        # FONDAMENTALE: Notifica gli observer che il valore è cambiato
+        # Range 45-130 per testare sia HEAT (<60) che COOLING (>100)
+        self.bpm = random.randint(45, 130)
+        print(f"[{self.room_name.upper()}] Battito rilevato: {self.bpm} bpm")
         self.updated_state()
-        
-        # Riprogramma il prossimo aggiornamento tra 2 secondi
-        # FIX: Usa get_running_loop() invece di get_event_loop()
         try:
-            asyncio.get_running_loop().call_later(2, self.update_state)
+            # Aggiornamento ogni 3 secondi
+            asyncio.get_running_loop().call_later(3, self.update_state)
         except RuntimeError:
-            pass # Il loop è stato chiuso
+            pass 
 
-async def main():
-    root = resource.Site()
-    sensor = HeartRateResource()
-    
-    # Mappa la risorsa all'URL "heartrate"
-    root.add_resource(['heartrate'], sensor)
+async def find_free_port_and_start():
+    """
+    Tenta di avviare il sensore sulla prima porta CoAP libera
+    partendo dalla 5683 (Standard CoAP).
+    """
+    BASE_PORT = 5683
+    MAX_RETRIES = 10 # Supporta fino a 10 stanze (5683 -> 5693)
 
-    # Avvia il ciclo di aggiornamento dati ORA CHE IL LOOP ESISTE
-    sensor.update_state()
+    for i in range(MAX_RETRIES):
+        current_port = BASE_PORT + i
+        room_name = f"room{i+1}" # room1, room2...
+        
+        root = resource.Site()
+        # Passiamo il nome stanza alla risorsa per log più belli
+        sensor = HeartRateResource(room_name)
+        root.add_resource(['heartrate'], sensor)
 
-    # FIX WINDOWS: Specificare bind=('127.0.0.1', 5683) è obbligatorio su Windows
-    # altrimenti crasha cercando di bindare su "any address"
-    await aiocoap.Context.create_server_context(root, bind=('127.0.0.1', 5683))
-    
-    print("[SENSORE] Smart Bedside Monitor avviato su coap://127.0.0.1:5683/heartrate")
+        print(f"Tentativo avvio come {room_name} su porta {current_port}...")
+        
+        try:
+            # Se questa riga non fallisce, la porta è libera!
+            await aiocoap.Context.create_server_context(root, bind=('127.0.0.1', current_port))
+            
+            print(f"\n{GREEN}✅ SENSORE ATTIVO!{RESET}")
+            print(f"   Stanza Assegnata: {CYAN}{room_name.upper()}{RESET}")
+            print(f"   Porta CoAP:       {current_port}")
+            print(f"   Resource:         coap://127.0.0.1:{current_port}/heartrate")
+            print("----------------------------------------------------")
+            
+            sensor.update_state()
+            await asyncio.get_running_loop().create_future() # Loop infinito
+            return # Esce dalla funzione se ha successo
 
-    # Mantieni il server attivo
-    await asyncio.get_running_loop().create_future()
+        except OSError:
+            # Porta occupata, continua il ciclo e prova la prossima
+            print(f"❌ Porta {current_port} occupata. Provo la successiva...")
+            continue
+            
+    print(f"\n{RED}ERRORE CRITICO: Nessuna porta libera trovata nel range!{RESET}")
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(find_free_port_and_start())
     except KeyboardInterrupt:
-        print("Sensore spento.")
+        print("\nSensore spento.")
