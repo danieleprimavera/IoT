@@ -55,7 +55,7 @@ def find_available_room():
             try:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             except AttributeError:
-                pass # Su Windows potrebbe non servire per UDP, ma non fa male
+                pass
                 
             s.bind(('127.0.0.1', lock_port))
             
